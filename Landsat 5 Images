@@ -1,0 +1,92 @@
+//Code for Landsat 8 images is the same except for different bit numbers, image colleciton import name, date, and MNDWI threshold.
+
+// Standard Cloud Masking Function:
+function maskL8sr(image) {
+ // Bits 4 and 3 are cloud shadow and cloud, respectively - mask pixel if that bit = 1.
+ var cloudShadowBitMask = (1 << 4);
+ var cloudsBitMask = (1 << 3);
+ // Select QA_PIXEL band.
+ var qa = image.select('QA_PIXEL');
+ // Set 'flags' to zero to indicate clear conditions.
+ var mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0)
+ .and(qa.bitwiseAnd(cloudsBitMask).eq(0));
+ return image.updateMask(mask);
+}
+
+// Load data, filter to required date, apply cloud mask, and clip to the rectangular geometry of the study area
+var collection = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").filterDate('2003-05-01', '2003-05-30').map(maskL8sr);
+
+var median = collection.median();
+
+var clipped = median.clip(geometry);
+
+//Visualise RGB on the map and use 'visualize' to make them export-friendly
+Map.addLayer(clipped, {bands: ['SR_B4', 'SR_B5', 'SR_B3'], min: 7000, max: 20000}, 'true colour');
+var falsee = clipped.visualize({bands: ['SR_B4', 'SR_B5', 'SR_B3'], min: 7000, max: 20000});
+var truee = clipped.visualize({bands: ['SR_B3', 'SR_B2', 'SR_B1'], min: 7000, max: 20000});
+
+//Create MNDWI
+var mndwi = clipped.normalizedDifference(['SR_B2', 'SR_B5']).rename('mndwi');
+
+//MNDWI viz params
+var mndwiParams = {
+min: 0,
+max: 1,
+palette: ['white', 'black']
+};
+
+//Visualise MNDWI on the map
+Map.addLayer(mndwi.clip(geometry), mndwiParams, 'mndwi');
+
+//tMNDWI
+var mergedAllFunction = function(image) {
+  var tmnndwix = image.normalizedDifference(['SR_B2', 'SR_B5']).rename('TMNDWIX');
+
+  // Set the threshold for Landsat 5
+  var thres = tmnndwix.gte(0.1).rename('thres');
+
+  return image.addBands(tmnndwix).addBands(thres);
+};
+
+// Import data again as above then apply threshold MNDWI function
+var mndwi_spc = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+    .filterDate('2003-05-01', '2003-05-30')
+    .map(mergedAllFunction).map(maskL8sr);
+
+var median_mndwi = mndwi_spc.median();
+
+var final_xyz = median_mndwi.clip(geometry);
+
+// Visualise thresholded layer
+Map.addLayer(ee.Image(final_xyz.first(final_xyz)), imageVisParam, 'threshold');
+
+//Image export params and code
+var TruColRefl = clipped.multiply(0.0000275).subtract(0.2);
+
+Export.image.toDrive({
+  image: truee,
+  description: '2003_RGB',
+  scale: 100,
+  region: geometry
+});  
+
+Export.image.toDrive({
+  image: falsee,
+  description: '2003_false',
+  scale: 100,
+  region: geometry
+});  
+
+Export.image.toDrive({
+  image: mndwi,
+  description: '2003_MNDWI',
+  scale: 100,
+  region: geometry
+});
+
+Export.image.toDrive({
+  image: final_xyz.toDouble(),
+  description: '2003_TMNDWI',
+  scale: 100,
+  region: geometry
+});

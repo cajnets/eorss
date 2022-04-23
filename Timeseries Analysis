@@ -1,0 +1,61 @@
+#Load packages for plotting graphs and conducting the timeseries analysis
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from statsmodels.tsa.seasonal import seasonal_decompose, STL
+from statsmodels.tsa.stattools import adfuller, kpss, acf
+
+#Load in data
+combined = pd.read_csv('threshold_final.csv')
+combined = combined.set_index('date')
+area = combined.drop(columns=['thres'])
+
+#Plot raw/observed timeseries
+fig, ax1 = plt.subplots(1, figsize=(13, 4))
+
+area.plot(ax=ax1)
+
+ax2 = ax1.twinx()
+ax2.set_ylabel('Thresholded MNDWI as\nProportion of GSL Outline', fontsize=13, rotation=270, labelpad=30)
+plt.ylim(0.45, 0.94)
+
+ax2 = plt.gca()
+ax1.set_ylim([3000, 6500])
+
+ax1.set_ylabel('Area (km$^2$)', fontsize=14)
+ax1.set_xlabel('Date', fontsize=14)
+
+ax1.get_legend().remove()
+
+plt.axline((411, 3000), (411, 6500), ls='--', c='red')
+
+ax1.set_xticks(x1)
+ax1.set_xticklabels(xyz, minor=False)
+
+plt.show()
+
+fig.savefig('raw_timeseries.png', dpi=200, bbox_inches='tight', facecolor='white')
+
+#Fit the LOESS decomposition and plot the results (here for the overall trend)
+fig, ax1 = plt.subplots(1, figsize=(13, 4))
+
+stl = STL(test_a, period=16, seasonal=7)
+res = stl.fit()
+fig = res.trend.plot(ax=ax1)
+
+ax1.set_ylabel('Area (km$^2$)', fontsize=14)
+ax1.set_xlabel('Date', fontsize=14)
+ax1.set_ylim([3500, 6500])
+
+ax1.set_xticks(x1)
+ax1.set_xticklabels(xyz, minor=False)
+
+ax1.fig.savefig('smooth_timeseries.png', dpi=200, bbox_inches='tight', facecolor='white')
+
+#Run and print results of ADF test
+result = adfuller(test_a, autolag='AIC')
+print(f'ADF Statistic: {result[0]}')
+print(f'p-value: {result[1]}')
+for key, value in result[4].items():
+    print('Critial Values:')
+    print(f'   {key}, {value}')
